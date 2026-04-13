@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlipBot Pro — Live Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: { extend: { colors: { neon: '#39FF14' }, fontFamily: { mono: ['"JetBrains Mono"', 'monospace'], sans: ['Inter', 'sans-serif'] } } }
+  }
+</script>
+<style>
+  :root { --neon:#39FF14; --neon-dim:rgba(57,255,20,0.1); --neon-glow:0 0 8px rgba(57,255,20,0.8),0 0 24px rgba(57,255,20,0.3); --bg:#080808; --surface:#0f0f0f; --surface2:#131313; --border:#1a1a1a; }
+  *,*::before,*::after{box-sizing:border-box}
+  body{background:var(--bg);color:#d4d4d4;font-family:'Inter',sans-serif;min-height:100vh;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:9999}
+  body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(57,255,20,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(57,255,20,0.02) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0}
+  .z1{position:relative;z-index:1}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:6px}
+  .card-inner{background:var(--surface2);border:1px solid var(--border);border-radius:4px}
+  .neon{color:var(--neon)}.neon-glow{color:var(--neon);text-shadow:var(--neon-glow)}.neon-border{border-color:rgba(57,255,20,0.35)!important}.neon-bg{background:var(--neon-dim)}
+  .pulse-dot{width:7px;height:7px;background:var(--neon);border-radius:50%;box-shadow:0 0 6px var(--neon),0 0 12px rgba(57,255,20,0.5);animation:pulse-anim 1.6s ease-in-out infinite;flex-shrink:0}
+  @keyframes pulse-anim{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.7)}}
+  .pulse-dot.paused{background:#FF4444;box-shadow:0 0 6px #FF4444;animation:none;opacity:.8}
+  .running-badge{display:flex;align-items:center;gap:6px;background:rgba(57,255,20,.07);border:1px solid rgba(57,255,20,.25);border-radius:20px;padding:4px 12px}
+  .running-badge.paused-badge{background:rgba(255,68,68,.07);border-color:rgba(255,68,68,.25)}
+  .badge-text{color:var(--neon);font-size:11px;font-weight:700;letter-spacing:.1em;font-family:'JetBrains Mono',monospace}
+  .running-badge.paused-badge .badge-text{color:#FF4444}
+  .counter-num{font-family:'JetBrains Mono',monospace;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+  .live-feed-scroll{height:380px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(57,255,20,.2) transparent}
+  .live-feed-scroll::-webkit-scrollbar{width:3px}.live-feed-scroll::-webkit-scrollbar-thumb{background:rgba(57,255,20,.2);border-radius:2px}
+  .feed-entry{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.03);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.4;animation:feedIn .25s ease-out}
+  @keyframes feedIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+  .feed-ts{color:#3a3a3a;flex-shrink:0;font-size:10px;margin-top:1px}
+  .feed-scan{color:#555}.feed-skip{color:#cc4444}.feed-match{color:#39FF14}.feed-lowball{color:#d4a017}.feed-seller{color:#4a9eff}.feed-posted{color:#39FF14;font-weight:600}.feed-error{color:#FF4444}.feed-info{color:#888}
+  .pnl-scroll{height:290px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(57,255,20,.2) transparent}
+  .pnl-scroll::-webkit-scrollbar{width:3px}.pnl-scroll::-webkit-scrollbar-thumb{background:rgba(57,255,20,.2);border-radius:2px}
+  .pnl-row-posted{background:rgba(57,255,20,.04)}.pnl-row-review{background:rgba(212,160,23,.04)}.pnl-row-skip{background:rgba(204,68,68,.04)}.pnl-row:hover{background:rgba(255,255,255,.03)!important}
+  .lb-scroll{height:260px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(57,255,20,.2) transparent}
+  .lb-scroll::-webkit-scrollbar{width:3px}.lb-scroll::-webkit-scrollbar-thumb{background:rgba(57,255,20,.2);border-radius:2px}
+  .toggle-wrap{position:relative;display:inline-block;width:42px;height:22px}
+  .toggle-wrap input{opacity:0;width:0;height:0}
+  .toggle-slider{position:absolute;cursor:pointer;inset:0;background:#222;border-radius:22px;transition:.25s;border:1px solid #333}
+  .toggle-slider::before{content:'';position:absolute;height:16px;width:16px;left:2px;bottom:2px;background:#555;border-radius:50%;transition:.25s}
+  .toggle-wrap input:checked + .toggle-slider{background:rgba(57,255,20,.15);border-color:rgba(57,255,20,.4)}
+  .toggle-wrap input:checked + .toggle-slider::before{transform:translateX(20px);background:var(--neon);box-shadow:0 0 6px var(--neon)}
+  .listing-card{cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+  .listing-card:hover{transform:translateY(-3px);border-color:rgba(57,255,20,.4)!important;box-shadow:0 8px 32px rgba(57,255,20,.08),0 0 0 1px rgba(57,255,20,.1)}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center;padding:16px}
+  .modal-overlay.open{display:flex}
+  .modal-box{background:#0e0e0e;border:1px solid rgba(57,255,20,.2);border-radius:8px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;box-shadow:0 0 80px rgba(57,255,20,.06);scrollbar-width:thin;scrollbar-color:rgba(57,255,20,.2) transparent;animation:modalIn .2s ease-out}
+  .modal-box::-webkit-scrollbar{width:3px}.modal-box::-webkit-scrollbar-thumb{background:rgba(57,255,20,.2)}
+  @keyframes modalIn{from{opacity:0;transform:scale(.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  #pause-btn{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.08em;padding:8px 18px;border-radius:4px;cursor:pointer;transition:all .2s;background:rgba(57,255,20,.08);border:1px solid rgba(57,255,20,.3);color:var(--neon);white-space:nowrap}
+  #pause-btn:hover{background:rgba(57,255,20,.15)}
+  #pause-btn.paused{background:rgba(255,68,68,.08);border-color:rgba(255,68,68,.3);color:#FF4444}
+  #pause-btn.paused:hover{background:rgba(255,68,68,.14)}
+  .section-header{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.12em;color:#555;text-transform:uppercase}
+  .stat-label{font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#444;font-family:'JetBrains Mono',monospace}
+  .big-counter{font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:800;color:var(--neon);text-shadow:var(--neon-glow);letter-spacing:-0.02em;line-height:1}
+  .sep{border:none;border-top:1px solid var(--border);margin:0}
+  .view-btn{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.06em;padding:4px 10px;border-radius:3px;background:rgba(57,255,20,.07);border:1px solid rgba(57,255,20,.2);color:var(--neon);cursor:pointer;transition:all .15s}
+  .view-btn:hover{background:rgba(57,255,20,.15);border-color:rgba(57,255,20,.4)}
+
+  /* Connection banner */
+  #conn-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:500;padding:8px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.08em}
+  #conn-banner.connecting{display:block;background:rgba(212,160,23,.15);color:#d4a017;border-bottom:1px solid rgba(212,160,23,.3)}
+  #conn-banner.disconnected{display:block;background:rgba(255,68,68,.12);color:#FF4444;border-bottom:1px solid rgba(255,68,68,.3)}
+
+  @media(max-width:1024px){.main-grid{grid-template-columns:1fr 1fr!important}.right-panel{grid-column:1/-1}}
+  @media(max-width:640px){.main-grid{grid-template-columns:1fr!important}.listings-grid{grid-template-columns:1fr 1fr!important}.header-stats{gap:16px!important}.big-counter{font-size:26px!important}}
+  @media(max-width:400px){.listings-grid{grid-template-columns:1fr!important}}
+</style>
+</head>
+<body>
+<!-- Connection banner -->
+<div id="conn-banner" class="connecting">⟳ CONNECTING TO FLIPBOT SERVER...</div>
+
+<div class="z1 p-3 md:p-4 max-w-[1600px] mx-auto">
+
+  <!-- HEADER -->
+  <header class="card neon-border mb-4 p-4">
+    <div class="flex flex-wrap items-center gap-4 justify-between">
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <div>
+          <div class="counter-num text-xl neon-glow tracking-widest">FLIPBOT PRO</div>
+          <div style="font-size:10px;color:#3a3a3a;font-family:'JetBrains Mono',monospace;letter-spacing:.06em;">v1.0.0 — Live Operations</div>
+        </div>
+        <div class="running-badge" id="running-badge">
+          <div class="pulse-dot" id="pulse-dot"></div>
+          <span class="badge-text" id="badge-text">CONNECTING</span>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-5 md:gap-8 header-stats">
+        <div class="text-center">
+          <div class="stat-label mb-1">Items Scanned</div>
+          <div class="counter-num text-2xl text-white" id="scanned-counter">—</div>
+        </div>
+        <div class="text-center">
+          <div class="stat-label mb-1">Active Listings</div>
+          <div class="counter-num text-2xl text-white" id="listings-counter">—</div>
+        </div>
+        <div class="text-center">
+          <div class="stat-label mb-1">Est. Profit</div>
+          <div class="counter-num text-2xl neon-glow" id="profit-counter">—</div>
+        </div>
+        <div class="text-center">
+          <div class="stat-label mb-1">Messages Sent</div>
+          <div class="counter-num text-2xl" style="color:#d4a017;" id="messages-header">—</div>
+        </div>
+      </div>
+      <button id="pause-btn" onclick="sendAction(isPaused ? 'resume' : 'pause')">⏸ PAUSE BOT</button>
+    </div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <div class="grid gap-4 mb-4 main-grid" style="grid-template-columns:1fr 1.4fr 1fr;">
+
+    <!-- LEFT: Live Feed -->
+    <div class="card p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="pulse-dot" id="feed-dot"></div>
+        <span class="section-header">Live Activity Feed</span>
+      </div>
+      <hr class="sep mb-3">
+      <div class="live-feed-scroll" id="live-feed">
+        <div class="feed-entry feed-info"><span class="feed-ts" id="init-ts">--:--:--</span><span>Waiting for bot connection...</span></div>
+      </div>
+    </div>
+
+    <!-- CENTER: P&L + Chart -->
+    <div class="card p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="section-header">📊 Margin Calculator — P&amp;L</span>
+      </div>
+      <hr class="sep mb-3">
+      <div class="pnl-scroll mb-4">
+        <table class="w-full" style="border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th class="stat-label text-left pb-2 pr-2" style="font-size:9px;position:sticky;top:0;background:var(--surface);z-index:1;">ITEM</th>
+              <th class="stat-label text-right pb-2 pr-2" style="font-size:9px;position:sticky;top:0;background:var(--surface);z-index:1;">BUY</th>
+              <th class="stat-label text-right pb-2 pr-2" style="font-size:9px;position:sticky;top:0;background:var(--surface);z-index:1;">EBAY</th>
+              <th class="stat-label text-right pb-2 pr-2" style="font-size:9px;position:sticky;top:0;background:var(--surface);z-index:1;">MARGIN</th>
+              <th class="stat-label text-right pb-2" style="font-size:9px;position:sticky;top:0;background:var(--surface);z-index:1;">STATUS</th>
+            </tr>
+          </thead>
+          <tbody id="pnl-tbody">
+            <tr><td colspan="5" style="text-align:center;padding:20px;color:#333;font-family:'JetBrains Mono',monospace;font-size:11px;">Waiting for scan data...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="section-header mb-2" style="font-size:9px;">Margin Distribution</div>
+        <canvas id="margin-chart" height="100"></canvas>
+      </div>
+    </div>
+
+    <!-- RIGHT: Lowball Engine -->
+    <div class="card p-4 right-panel">
+      <div class="section-header mb-1">LOWBALL ENGINE 🔥</div>
+      <div style="font-size:10px;color:#555;font-family:'JetBrains Mono',monospace;letter-spacing:.06em;margin-bottom:12px;">AI-GENERATED MESSAGES</div>
+      <div class="card-inner p-3 mb-4 text-center" style="border-color:rgba(57,255,20,.12);">
+        <div class="big-counter" id="lb-counter">0</div>
+        <div style="font-size:10px;color:#444;font-family:'JetBrains Mono',monospace;margin-top:4px;letter-spacing:.05em;">lowball messages sent today</div>
+      </div>
+      <div class="card-inner flex items-center justify-between p-3 mb-4">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:#ccc;margin-bottom:2px;">Flaw Detection</div>
+          <div style="font-size:10px;color:#3a3a3a;" title="Sends listing photos to GPT-4o to detect dents, rust, and damage before generating offer">
+            GPT-4o photo analysis ⓘ
+          </div>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="flaw-toggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="section-header mb-2" style="font-size:9px;">Recent Messages Sent</div>
+      <div class="lb-scroll" id="lb-list">
+        <div style="text-align:center;padding:20px;color:#333;font-family:'JetBrains Mono',monospace;font-size:11px;">No messages sent yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM: eBay Listings -->
+  <div class="card p-4">
+    <div class="section-header mb-4">🚀 Recent eBay Listings Posted</div>
+    <div class="grid gap-4 listings-grid" style="grid-template-columns:repeat(3,1fr);" id="listings-grid">
+      <div style="grid-column:1/-1;text-align:center;padding:32px;color:#333;font-family:'JetBrains Mono',monospace;font-size:11px;">No listings posted yet — bot will post here as matches are found</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal-box p-6" id="modal-box">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <div class="stat-label mb-1">eBay Listing — Posted</div>
+        <h2 class="text-white font-bold text-base leading-snug" id="modal-title"></h2>
+      </div>
+      <button onclick="closeModal()" style="color:#444;font-size:18px;line-height:1;background:none;border:none;cursor:pointer;padding:2px 4px;margin-left:12px;flex-shrink:0;" onmouseover="this.style.color='#ccc'" onmouseout="this.style.color='#444'">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let isPaused = false;
+let ws       = null;
+let chart    = null;
+let pnlData  = [];
+let listings = [];
+
+const fmt      = n => (+n || 0).toLocaleString('en-US');
+const fmtMoney = n => '$' + (+n || 0).toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const ts       = () => new Date().toLocaleTimeString('en-US', { hour12:false });
+
+// ── WebSocket connection ────────────────────────────────────────────
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+
+  ws.onopen = () => {
+    setBanner(null);
+    setStatus('RUNNING', false);
+    addFeedEntry('info', '🔌 Connected to FlipBot server');
+  };
+
+  ws.onclose = () => {
+    setBanner('disconnected', '⚠ DISCONNECTED — reconnecting in 5s...');
+    setStatus('OFFLINE', true);
+    setTimeout(connect, 5000);
+  };
+
+  ws.onerror = () => {
+    setBanner('connecting', '⟳ CONNECTING TO FLIPBOT SERVER...');
+  };
+
+  ws.onmessage = e => {
+    try { handleMessage(JSON.parse(e.data)); } catch(_) {}
+  };
+}
+
+function sendAction(action) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ action }));
+  }
+}
+
+// ── Message handler ────────────────────────────────────────────────
+function handleMessage(msg) {
+  switch (msg.type) {
+
+    case 'init':
+      applyState(msg.data);
+      break;
+
+    case 'feed':
+      addFeedEntry(msg.data.type, msg.data.text);
+      break;
+
+    case 'stats':
+      if (msg.data.scanned !== undefined)
+        document.getElementById('scanned-counter').textContent = fmt(msg.data.scanned);
+      break;
+
+    case 'pnl_update':
+      pnlData.unshift(msg.data);
+      if (pnlData.length > 30) pnlData.pop();
+      renderPnlTable();
+      updateChart();
+      break;
+
+    case 'profit_tick':
+      document.getElementById('profit-counter').textContent = fmtMoney(msg.data.total);
+      document.getElementById('listings-counter').textContent = fmt(
+        (parseInt(document.getElementById('listings-counter').textContent.replace(/,/g,'')) || 0) + 1
+      );
+      break;
+
+    case 'lowball_tick':
+      document.getElementById('lb-counter').textContent = fmt(msg.data.count);
+      document.getElementById('messages-header').textContent = fmt(msg.data.count);
+      if (msg.data.entry) prependLbEntry(msg.data.entry);
+      break;
+
+    case 'listing_posted':
+      listings.unshift(msg.data);
+      if (listings.length > 6) listings.pop();
+      renderListings();
+      break;
+
+    case 'bot_status':
+      isPaused = msg.data.paused;
+      setStatus(isPaused ? 'PAUSED' : 'RUNNING', isPaused);
+      break;
+  }
+}
+
+// ── Apply full state on init/reconnect ─────────────────────────────
+function applyState(state) {
+  isPaused = state.paused;
+  pnlData  = state.pnlData  || [];
+  listings = state.recentListings || [];
+
+  document.getElementById('scanned-counter').textContent  = fmt(state.scanned);
+  document.getElementById('listings-counter').textContent = fmt(state.activeListings);
+  document.getElementById('profit-counter').textContent   = fmtMoney(state.profit);
+  document.getElementById('messages-header').textContent  = fmt(state.lowballCount);
+  document.getElementById('lb-counter').textContent       = fmt(state.lowballCount);
+
+  // Replay feed log
+  if (state.feedLog && state.feedLog.length) {
+    const feed = document.getElementById('live-feed');
+    feed.innerHTML = '';
+    [...state.feedLog].reverse().forEach(e => addFeedEntry(e.type, e.text, true));
+  }
+
+  // Replay lowball messages
+  const lbList = document.getElementById('lb-list');
+  if (state.lowballMessages && state.lowballMessages.length) {
+    lbList.innerHTML = '';
+    state.lowballMessages.forEach(m => prependLbEntry(m));
+  }
+
+  setStatus(isPaused ? 'PAUSED' : 'RUNNING', isPaused);
+  renderPnlTable();
+  renderListings();
+  updateChart();
+}
+
+// ── Feed ────────────────────────────────────────────────────────────
+function addFeedEntry(type, text, prepend = false) {
+  const feed = document.getElementById('live-feed');
+
+  // Clear placeholder
+  const placeholder = feed.querySelector('[data-placeholder]');
+  if (placeholder) placeholder.remove();
+
+  const el = document.createElement('div');
+  el.className = `feed-entry feed-${type}`;
+  el.innerHTML = `<span class="feed-ts">${ts()}</span><span>${text}</span>`;
+
+  if (prepend) {
+    feed.insertBefore(el, feed.firstChild);
+  } else {
+    feed.insertBefore(el, feed.firstChild);
+  }
+
+  while (feed.children.length > 50) feed.removeChild(feed.lastChild);
+}
+
+// ── P&L Table ───────────────────────────────────────────────────────
+function renderPnlTable() {
+  const tb = document.getElementById('pnl-tbody');
+  if (!pnlData.length) {
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#333;font-family:\'JetBrains Mono\',monospace;font-size:11px;">Waiting for scan data...</td></tr>';
+    return;
+  }
+  tb.innerHTML = pnlData.map(r => {
+    const rowCls = r.status === 'POSTED' ? 'pnl-row-posted' : r.status === 'REVIEWING' ? 'pnl-row-review' : 'pnl-row-skip';
+    const mCls   = r.margin > 35 ? 'style="color:#39FF14;"' : r.margin > 15 ? 'style="color:#d4a017;"' : 'style="color:#cc4444;"';
+    const [sCls, sLabel] = r.status === 'POSTED'
+      ? ['style="color:#39FF14;font-size:9px;white-space:nowrap;"','● POSTED']
+      : r.status === 'REVIEWING'
+        ? ['style="color:#d4a017;font-size:9px;white-space:nowrap;"','◐ REVIEW']
+        : ['style="color:#cc4444;font-size:9px;white-space:nowrap;"','✕ SKIP'];
+    return `<tr class="pnl-row ${rowCls}" style="border-bottom:1px solid rgba(255,255,255,.025);">
+      <td style="padding:6px 6px 6px 4px;font-size:11px;color:#bbb;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'JetBrains Mono',monospace;" title="${r.name}">${r.name}</td>
+      <td style="padding:6px 4px;font-size:11px;color:#555;text-align:right;font-family:'JetBrains Mono',monospace;">$${r.buy}</td>
+      <td style="padding:6px 4px;font-size:11px;color:#888;text-align:right;font-family:'JetBrains Mono',monospace;">$${r.ebay}</td>
+      <td style="padding:6px 4px;font-size:11px;font-weight:700;text-align:right;font-family:'JetBrains Mono',monospace;" ${mCls}>${r.margin}%</td>
+      <td style="padding:6px 0 6px 4px;font-weight:700;text-align:right;font-family:'JetBrains Mono',monospace;" ${sCls}>${sLabel}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Chart ────────────────────────────────────────────────────────────
+function initChart() {
+  const ctx = document.getElementById('margin-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['0–10%','10–25%','25–50%','50%+'],
+      datasets: [{
+        data: [0,0,0,0],
+        backgroundColor:['rgba(204,68,68,.65)','rgba(212,160,23,.65)','rgba(57,255,20,.35)','rgba(57,255,20,.8)'],
+        borderColor:['#cc4444','#d4a017','#39FF14','#39FF14'],
+        borderWidth:1,borderRadius:3,
+      }]
+    },
+    options: {
+      responsive:true,
+      plugins:{legend:{display:false}},
+      scales:{
+        y:{ticks:{color:'#3a3a3a',font:{size:9,family:"'JetBrains Mono',monospace"},stepSize:1},grid:{color:'rgba(255,255,255,.04)'},border:{color:'transparent'}},
+        x:{ticks:{color:'#3a3a3a',font:{size:9,family:"'JetBrains Mono',monospace"}},grid:{display:false},border:{color:'#1a1a1a'}}
+      }
+    }
+  });
+}
+
+function updateChart() {
+  if (!chart) return;
+  const b = [0,0,0,0];
+  pnlData.forEach(r => {
+    if (r.margin < 10) b[0]++;
+    else if (r.margin < 25) b[1]++;
+    else if (r.margin < 50) b[2]++;
+    else b[3]++;
+  });
+  chart.data.datasets[0].data = b;
+  chart.update('none');
+}
+
+// ── Lowball List ──────────────────────────────────────────────────────
+function prependLbEntry(m) {
+  const c = document.getElementById('lb-list');
+  const placeholder = c.querySelector('[data-placeholder]');
+  if (placeholder) { c.innerHTML = ''; }
+
+  const sc = (m.status||'').includes('INTERESTED') ? 'color:#39FF14;font-weight:700'
+           : (m.status||'').includes('GHOSTED')    ? 'color:#d4a017;font-weight:600'
+           : 'color:#444';
+  const el = document.createElement('div');
+  el.style.cssText = 'background:#0b0b0b;border:1px solid #1a1a1a;border-radius:4px;padding:10px;margin-bottom:8px;';
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#d4a017;">${m.seller}</span><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#2e2e2e;">${m.time}</span></div><div style="font-size:11px;color:#666;margin-bottom:5px;font-style:italic;">"${m.message}"</div><div style="font-size:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;${sc}">${m.status}</div>`;
+  c.insertBefore(el, c.firstChild);
+  while (c.children.length > 10) c.removeChild(c.lastChild);
+}
+
+// ── Listings Grid ─────────────────────────────────────────────────────
+function renderListings() {
+  const grid = document.getElementById('listings-grid');
+  if (!listings.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:32px;color:#333;font-family:\'JetBrains Mono\',monospace;font-size:11px;">No listings posted yet — bot will post here as matches are found</div>';
+    return;
+  }
+  grid.innerHTML = listings.map((l, i) => {
+    const profit = +(l.profit || (l.price - l.bought) || 0);
+    return `<div class="card listing-card p-4" onclick="openModal(${i})" style="border-color:#1a1a1a;">
+      <div style="font-size:36px;margin-bottom:12px;line-height:1;">${l.icon || '🏷️'}</div>
+      <div style="font-size:12px;font-weight:600;color:#ccc;margin-bottom:12px;line-height:1.35;min-height:32px;">${l.title}</div>
+      <div style="border-top:1px solid #1a1a1a;padding-top:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <span style="font-size:10px;color:#3a3a3a;font-family:'JetBrains Mono',monospace;">Listed at</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:#39FF14;text-shadow:0 0 8px rgba(57,255,20,.5);">$${l.price}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <span style="font-size:10px;color:#3a3a3a;font-family:'JetBrains Mono',monospace;">Bought for</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#444;">$${l.bought}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span style="font-size:10px;color:#3a3a3a;font-family:'JetBrains Mono',monospace;">Profit</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#39FF14;">+$${profit.toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:10px;color:#2e2e2e;font-family:'JetBrains Mono',monospace;">${l.time}m ago</span>
+          ${l.ebayUrl ? `<a href="${l.ebayUrl}" target="_blank" class="view-btn">View on eBay</a>` : '<button class="view-btn" onclick="event.stopPropagation()">View Details</button>'}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────
+function openModal(i) {
+  const l = listings[i];
+  if (!l) return;
+  const profit = +(l.profit || (l.price - l.bought) || 0);
+  const margin = Math.round(profit / l.price * 100);
+
+  document.getElementById('modal-title').textContent = l.title;
+  document.getElementById('modal-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+      <div style="background:#0b0b0b;border:1px solid #1a1a1a;border-radius:4px;padding:10px;"><div class="stat-label" style="margin-bottom:4px;">Condition</div><div style="font-size:13px;font-weight:600;color:#ccc;">Used — Excellent</div></div>
+      <div style="background:#0b0b0b;border:1px solid #1a1a1a;border-radius:4px;padding:10px;"><div class="stat-label" style="margin-bottom:4px;">Listed Price</div><div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:#39FF14;text-shadow:0 0 8px rgba(57,255,20,.5);">$${l.price}</div></div>
+    </div>
+    ${l.description ? `<div style="margin-bottom:16px;"><div class="stat-label" style="margin-bottom:8px;">AI-Generated Description</div><div style="font-size:13px;line-height:1.65;color:#999;white-space:pre-line;">${l.description}</div></div>` : ''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+      <div style="background:#0b0b0b;border:1px solid #1a1a1a;border-radius:4px;padding:10px;"><div class="stat-label" style="margin-bottom:4px;">Shipping</div><div style="font-size:11px;color:#666;line-height:1.5;">USPS Priority Mail or UPS Ground. Tracked and insured. Ships within 1 business day.</div></div>
+      <div style="background:#0b0b0b;border:1px solid #1a1a1a;border-radius:4px;padding:10px;"><div class="stat-label" style="margin-bottom:4px;">Returns</div><div style="font-size:11px;color:#666;line-height:1.5;">30-day returns accepted. Buyer pays return shipping.</div></div>
+    </div>
+    <div style="background:rgba(57,255,20,.04);border:1px solid rgba(57,255,20,.15);border-radius:4px;padding:14px;display:flex;justify-content:space-around;align-items:center;">
+      <div style="text-align:center;"><div class="stat-label" style="margin-bottom:4px;">Profit</div><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:#39FF14;text-shadow:0 0 8px rgba(57,255,20,.5);">+$${profit.toFixed(2)}</div></div>
+      <div style="width:1px;height:40px;background:#1a1a1a;"></div>
+      <div style="text-align:center;"><div class="stat-label" style="margin-bottom:4px;">Margin</div><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:#39FF14;text-shadow:0 0 8px rgba(57,255,20,.5);">${margin}%</div></div>
+      <div style="width:1px;height:40px;background:#1a1a1a;"></div>
+      <div style="text-align:center;"><div class="stat-label" style="margin-bottom:4px;">eBay</div>${l.ebayUrl ? `<a href="${l.ebayUrl}" target="_blank" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#39FF14;text-decoration:none;">View Listing ↗</a>` : '<div style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:800;color:#555;">N/A</div>'}</div>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function handleOverlayClick(e) { if (e.target === document.getElementById('modal-overlay')) closeModal(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── UI helpers ─────────────────────────────────────────────────────────
+function setBanner(type, text) {
+  const b = document.getElementById('conn-banner');
+  b.className = type ? type : '';
+  if (text) b.textContent = text;
+}
+
+function setStatus(label, paused) {
+  isPaused = paused;
+  const badge = document.getElementById('running-badge');
+  const dot   = document.getElementById('pulse-dot');
+  const fdot  = document.getElementById('feed-dot');
+  const btxt  = document.getElementById('badge-text');
+  const btn   = document.getElementById('pause-btn');
+
+  btxt.textContent = label;
+  if (paused) {
+    badge.classList.add('paused-badge');
+    dot.classList.add('paused');
+    fdot.classList.add('paused');
+    btn.textContent = '▶ RESUME BOT';
+    btn.classList.add('paused');
+  } else {
+    badge.classList.remove('paused-badge');
+    dot.classList.remove('paused');
+    fdot.classList.remove('paused');
+    btn.textContent = '⏸ PAUSE BOT';
+    btn.classList.remove('paused');
+  }
+}
+
+// ── Boot ────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  document.getElementById('init-ts').textContent = ts();
+  initChart();
+  connect();
+});
+</script>
+</body>
+</html>
